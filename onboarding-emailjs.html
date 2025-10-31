@@ -1,0 +1,207 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Client Onboarding Form (EmailJS + Signature)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  body { font-family: Arial, sans-serif; margin: 30px; max-width: 720px; }
+  h2 { margin-top: 0; }
+  label { font-weight: bold; display: block; margin-top: 14px; }
+  input, textarea, select { width: 100%; padding: 10px; margin-top: 6px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  button { padding: 12px; margin-top: 18px; width: 100%; font-size: 16px; }
+  canvas { border: 1px solid #333; width: 100%; height: 160px; touch-action: none; border-radius: 6px; }
+  .muted { color: #666; font-size: 12px; }
+  .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+</style>
+</head>
+<body>
+<h2>Client Onboarding Form</h2>
+<p class="muted">Demo using <strong>EmailJS</strong> to email submissions (including a signature image) without running your own server.</p>
+
+<form id="clientForm">
+  <div class="row">
+    <div>
+      <label for="firstName">First name</label>
+      <input id="firstName" name="firstName" required />
+    </div>
+    <div>
+      <label for="lastName">Last name</label>
+      <input id="lastName" name="lastName" required />
+    </div>
+  </div>
+
+  <label for="email">Email</label>
+  <input id="email" name="email" type="email" required />
+
+  <label for="phone">Phone</label>
+  <input id="phone" name="phone" type="tel" required />
+
+  <label for="service">Service Required</label>
+  <select id="service" name="service" required>
+    <option value="">Select...</option>
+    <option>Forklift Licence Training</option>
+    <option>Order Picker Licence Training</option>
+    <option>Manual Handling Training</option>
+    <option>Other</option>
+  </select>
+
+  <label for="notes">Additional Notes</label>
+  <textarea id="notes" name="notes" rows="4" placeholder="Any important details..."></textarea>
+
+  <label>Signature</label>
+  <canvas id="signaturePad"></canvas>
+  <div class="actions">
+    <button type="button" id="clearSig">Clear Signature</button>
+    <button type="button" id="undoSig">Undo Stroke</button>
+  </div>
+
+  <button type="submit">Submit</button>
+</form>
+
+<p class="muted">After you configure EmailJS (see README), the form will email all fields and the signature image to you.</p>
+
+<!-- EmailJS SDK -->
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script>
+/* ==== 1) EDIT THESE THREE VALUES AFTER YOU CREATE YOUR EMAILJS ACCOUNT ==== */
+const EMAILJS_PUBLIC_KEY = "YOUR_PUBLIC_KEY";      // e.g. "M3m7Nxxxxx..."
+const EMAILJS_SERVICE_ID = "YOUR_SERVICE_ID";      // e.g. "service_123abc"
+const EMAILJS_TEMPLATE_ID = "YOUR_TEMPLATE_ID";    // e.g. "template_abcd12"
+
+/* ==== Signature Pad (vanilla) ==== */
+const canvas = document.getElementById("signaturePad");
+const ctx = canvas.getContext("2d");
+let drawing = false;
+let strokes = [];
+let currentStroke = [];
+
+// Resize canvas to device pixel ratio for crisp lines
+function resizeCanvas() {
+  const ratio = Math.max(window.devicePixelRatio || 1, 1);
+  const w = canvas.clientWidth;
+  const h = canvas.clientHeight;
+  canvas.width = w * ratio;
+  canvas.height = h * ratio;
+  ctx.scale(ratio, ratio);
+}
+resizeCanvas();
+window.addEventListener("resize", () => {
+  const saved = strokes.slice();
+  resizeCanvas();
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  redraw(saved);
+});
+
+function getPos(e) {
+  if (e.touches && e.touches.length) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: e.touches[0].clientX - rect.left,
+      y: e.touches[0].clientY - rect.top
+    };
+  }
+  return { x: e.offsetX, y: e.offsetY };
+}
+
+function startDraw(e) {
+  drawing = true;
+  currentStroke = [];
+  const p = getPos(e);
+  currentStroke.push(p);
+  ctx.beginPath();
+  ctx.moveTo(p.x, p.y);
+}
+function moveDraw(e) {
+  if (!drawing) return;
+  e.preventDefault();
+  const p = getPos(e);
+  currentStroke.push(p);
+  ctx.lineWidth = 2;
+  ctx.lineCap = "round";
+  ctx.lineTo(p.x, p.y);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(p.x, p.y);
+}
+function endDraw() {
+  if (!drawing) return;
+  drawing = false;
+  strokes.push(currentStroke);
+  ctx.beginPath();
+}
+function clearPad() {
+  strokes = [];
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+}
+function undoPad() {
+  strokes.pop();
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  redraw(strokes);
+}
+function redraw(strokesArr) {
+  ctx.lineWidth = 2;
+  ctx.lineCap = "round";
+  strokesArr.forEach(stroke => {
+    if (stroke.length) {
+      ctx.beginPath();
+      ctx.moveTo(stroke[0].x, stroke[0].y);
+      for (let i = 1; i < stroke.length; i++) {
+        ctx.lineTo(stroke[i].x, stroke[i].y);
+      }
+      ctx.stroke();
+    }
+  });
+}
+
+canvas.addEventListener("mousedown", startDraw);
+canvas.addEventListener("mousemove", moveDraw);
+canvas.addEventListener("mouseup", endDraw);
+canvas.addEventListener("mouseleave", endDraw);
+canvas.addEventListener("touchstart", startDraw, {passive: true});
+canvas.addEventListener("touchmove", moveDraw, {passive: false});
+canvas.addEventListener("touchend", endDraw);
+
+document.getElementById("clearSig").addEventListener("click", clearPad);
+document.getElementById("undoSig").addEventListener("click", undoPad);
+
+/* ==== EmailJS submit ==== */
+(function(){ emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY }); })();
+
+document.getElementById("clientForm").addEventListener("submit", async function(e) {
+  e.preventDefault();
+
+  // Convert signature to data URL (PNG)
+  const sigDataUrl = canvas.toDataURL("image/png");
+
+  // Compose form data for template params
+  const templateParams = {
+    firstName: document.getElementById("firstName").value,
+    lastName: document.getElementById("lastName").value,
+    email: document.getElementById("email").value,
+    phone: document.getElementById("phone").value,
+    service: document.getElementById("service").value,
+    notes: document.getElementById("notes").value,
+    signature_png: sigDataUrl
+  };
+
+  // Basic validation for signature (optional)
+  if (strokes.length === 0) {
+    if (!confirm("No signature detected. Submit anyway?")) return;
+  }
+
+  try {
+    const result = await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, templateParams);
+    alert("Submitted! Check your email inbox for the form data and signature image.");
+    this.reset();
+    clearPad();
+  } catch (err) {
+    console.error(err);
+    alert("Email failed. Double-check your EmailJS keys/IDs and try again.");
+  }
+});
+</script>
+</body>
+</html>
